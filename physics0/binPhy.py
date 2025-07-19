@@ -203,8 +203,10 @@ class PackingGame(gym.Env):
                 result = np.concatenate((result, self.space.heightmapC.reshape(-1)))
             if self.selectedAction:
                 self.candidates = None
+                # self.candidates= getConvexHullActions(self.space.posZValid, self.space.naiveMask,
+                #                                              self.heightResolution)
                 self.candidates= getConvexHullActions(self.space.posZValid, self.space.naiveMask,
-                                                             self.heightResolution)
+                                                             self.space.coors)
                 if self.candidates is not None:
                     if len(self.candidates) > self.selectedAction:
                         # sort with height
