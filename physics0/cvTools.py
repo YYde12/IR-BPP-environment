@@ -23,18 +23,21 @@ def getConvexHullActions(posZValid, mask, coors):
 
         # CoACD convex decomposition
         mesh_coacd = coacd.Mesh(free_space_mesh.vertices, free_space_mesh.faces)
-        parts = coacd.run_coacd(mesh_coacd, max_convex_hull=10, threshold=0.1)
+        parts = coacd.run_coacd(mesh_coacd, max_convex_hull=50, threshold=0.1)
         print(f"[rotIdx {rotIdx}] CoACD decomposition {len(parts)} convex hulls")
 
         # create Delaunay hulls
         filtered_hulls = []
-        view_hulls = []
         for i in range(len(parts)):
-            vertices = np.around(parts[i][0], decimals=2)
+            vertices = np.around(parts[i][0], decimals=4)
+            # 检查维度退化
+            if np.linalg.matrix_rank(vertices - vertices[0]) < 3:
+                print(f"[rotIdx {rotIdx}] Skipping degenerate convex hull {i} (less than 3D)")
+                continue
             hull = ConvexHull(vertices)
             volume = hull.volume
             print("Convex hull num " , i, " volume ", volume)
-            if volume > 1:
+            if volume > 10:
                 filtered_hulls.append(Delaunay(vertices))
 
         if not filtered_hulls:
