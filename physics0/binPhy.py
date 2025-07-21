@@ -236,6 +236,11 @@ class PackingGame(gym.Env):
     def action_to_position(self, action):
         rotIdx, lx, ly = self.candidates[action][0:3].astype(np.int)
         return rotIdx, np.round((lx * self.resolutionAct, ly * self.resolutionAct, self.bin_dimension[2]), decimals=6), (lx,ly)
+    
+
+    def action_to_position_heuristic(self, rotIdx, lx, ly):
+        return rotIdx, np.round((lx * self.resolutionAct, ly * self.resolutionAct, self.bin_dimension[2]), decimals=6), (lx,ly)
+    
 
     def prejudge(self, rotIdx, translation, naiveMask):
         extents = self.shapeDict[self.next_item_ID][rotIdx].extents
@@ -258,6 +263,99 @@ class PackingGame(gym.Env):
 
         else:
             rotIdx, targetFLB, coordinate = self.action_to_position(action)
+            rotation = self.transformation[int(rotIdx)]
+
+            sim_suc = False
+            success = self.prejudge(rotIdx, targetFLB, self.space.naiveMask)
+            self.id = self.interface.addObject(self.dicPath[self.next_item_ID][0:-4], targetFLB = targetFLB, rotation = rotation,
+                                          linearDamping = 0.5, angularDamping = 0.5)
+
+            height = self.space.posZmap[rotIdx, coordinate[0], coordinate[1]]
+            self.interface.adjustHeight(self.id , height + self.tolerance)
+
+            if success:
+                if self.simulation:
+                    if self.non_blocking:
+                        self.finished[0] = False
+                        subProcess = threading.Thread(target=non_blocking_simulation, args=(self.interface, self.finished, self.id, self.non_blocking_result))
+                        subProcess.start()
+                        self.nowTask = True
+                        start_time = time.time()
+                        end_time   = start_time
+                        while end_time - start_time < self.time_limit:
+                            end_time = time.time()
+                            if self.finished[0]:
+                                break
+                        if not self.finished[0]:
+                            return self.nullObs, 0.0, False, {'Valid': False}
+                    else:
+                        success, sim_suc = self.interface.simulateToQuasistatic(givenId=self.id,
+                                                                            linearTol = 0.01,
+                                                                            angularTol = 0.01)
+                else:
+                    success, sim_suc = self.interface.simulateHeight(self.id)
+
+        if not self.globalView:
+            self.interface.disableObject(self.id)
+
+        bounds = self.interface.get_wraped_AABB(self.id, inner=False)
+        positionT, orientationT = self.interface.get_Wraped_Position_And_Orientation(self.id, inner=False)
+        self.packed.append([self.next_item_ID, self.dicPath[self.next_item_ID], positionT, orientationT])
+        self.packedId.append(self.id)
+
+        if not success:
+            if self.globalView and self.evaluate:
+                for replayIdx, idNow in enumerate(self.packedId):
+                    positionT, orientationT = self.interface.get_Wraped_Position_And_Orientation(idNow, inner=False)
+                    self.packed[replayIdx][2] = positionT
+                    self.packed[replayIdx][3] = orientationT
+            reward = 0.0
+            info = {'counter': self.item_idx,
+                    'ratio': self.get_ratio(),
+                    'Valid': True,
+                    }
+            observation = self.cur_observation()
+            return observation, reward, True, info
+
+        if sim_suc:
+            if self.globalView:
+                self.space.shot_whole()
+            else:
+                self.space.place_item_trimesh(self.shapeDict[self.next_item_ID][0], (positionT, orientationT), (bounds, self.next_item_ID))
+
+            self.item_vec[self.item_idx, 0] = self.next_item_ID
+            self.item_vec[self.item_idx, -1] = 1
+            item_ratio = self.get_item_ratio(self.next_item_ID)
+            reward = item_ratio * 10
+            self.item_idx += 1
+            self.item_creator.update_item_queue(self.orderAction)
+            self.item_creator.generate_item()  # add a new box to the list
+            observation = self.cur_observation()
+            return observation, reward, False, {'Valid': True}
+        else:
+            # Invalid call
+            self.packed.pop()
+            self.packedId.pop()
+            delId = self.interface.objs.pop()
+            self.interface.removeBody(delId)
+            self.item_creator.update_item_queue(self.orderAction)
+            self.item_creator.generate_item()  # Add a new box to the list
+            observation = self.cur_observation()
+            return observation, 0.0, False, {'Valid': False}
+
+    
+    # Note the transform between Ra coord and Rh coord
+    def step_heuristic(self, rotIdx, lx, ly):
+        if self.non_blocking and not self.finished[0]:
+            return self.nullObs, 0.0, False, {'Valid': False}
+
+        if self.non_blocking and self.finished[0] and self.nowTask:
+            success, sim_suc = self.non_blocking_result[0]
+            self.nowTask = False
+            self.non_blocking_result[0] = None
+
+        else:
+            rotIdx, targetFLB, coordinate = self.action_to_position_heuristic(rotIdx, lx, ly)
             rotation = self.transformation[int(rotIdx)]
 
             sim_suc = False

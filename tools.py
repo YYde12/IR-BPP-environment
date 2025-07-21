@@ -430,6 +430,56 @@ def test_hierachical(args, dqns, printInfo = False, timeStr = None, times = ''):
     # Return average reward and Q-value
     return avg_reward, avg_length
 
+
+def test_heuristic(args, printInfo=False, timeStr=None, times=''):
+    env = make_eval_env(args)
+    T_rewards, T_lengths, T_ratio = [], [], []
+    all_episodes = []
+    print('Heuristic Evaluation Start')
+
+    for _ in range(args.evaluation_episodes_test):
+        done = True
+        while True:
+            if done:
+                state, reward_sum, done, episode_length = env.reset(), 0, False, 0
+            # 获取下一个物体 ID
+            next_item_ID = env.gen_next_item_ID()
+            next_item = env.shapeDict[next_item_ID]
+
+            # 计算可行位置
+            env.space.get_possible_position(next_item_ID, next_item, env.selectedAction)
+
+            # 使用启发式方法选动作
+            rotIdx, lx, ly = env.space.get_heuristic_action(
+                dirIdx=0,  # 固定方向或扩展成参数
+                method=args.heuristic_method,
+                next_item_ID=next_item_ID,
+                next_item=next_item
+            )
+
+            state, reward, done, _ = env.step_heuristic(rotIdx, lx, ly)
+            reward_sum += reward
+            episode_length += 1
+
+            if done:
+                ratio = env.get_ratio()
+                T_ratio.append(ratio)
+                T_rewards.append(reward_sum)
+                T_lengths.append(episode_length)
+                if printInfo:
+                    print(f'Episode complete: reward={reward_sum}, ratio={ratio:.4f}')
+                all_episodes.append(copy.deepcopy(env.packed))
+                if timeStr:
+                    np.save(os.path.join('./logs/evaluation', timeStr, f'heuristic_trajs{times}.npy'), all_episodes)
+                break
+
+    env.close()
+    print('Heuristic Evaluation Finished')
+    print('Average Reward:', np.mean(T_rewards))
+    print('Average Length:', np.mean(T_lengths))
+    print('Mean Packing Ratio:', np.mean(T_ratio))
+
+
 def make_eval_env(args):
     env = gym.make(args.envName,
                    args = args)

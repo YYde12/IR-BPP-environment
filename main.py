@@ -8,7 +8,7 @@ from agent import Agent
 from memory import ReplayMemory
 from tensorboardX import SummaryWriter
 import time
-from tools import backup, registration_envs,  load_shape_dict, shotInfoPre, shapeProcessing, test_hierachical, test
+from tools import backup, registration_envs, test_heuristic, load_shape_dict, shotInfoPre, shapeProcessing, test_hierachical, test
 from trainer import trainer, trainer_hierarchical
 from arguments import get_args
 import gym
@@ -90,12 +90,21 @@ def main(args):
         # Perform all training.
         trainTool = trainer_hierarchical(writer, timeStr, [orderDQN, locDQN], [orderMem, locMem])
 
+    # if args.evaluate:
+    #     # Perform testing
+    #     if args.hierachical:
+    #         test_hierachical(args, [orderDQN, locDQN], True, timeStr)  # Test
+    #     else:
+    #         test(args, dqn, True,  timeStr)  # Test
     if args.evaluate:
-        # Perform testing
+        if args.use_heuristic:
+            print(f"Start heuristic evaluation with method: {args.heuristic_method}")
+            test_heuristic(args, printInfo=True, timeStr=timeStr)
         if args.hierachical:
             test_hierachical(args, [orderDQN, locDQN], True, timeStr)  # Test
         else:
-            test(args, dqn, True,  timeStr)  # Test
+            print('Start RL evaluation...')
+            test(args, dqn, printInfo=True, timeStr=timeStr)
     else:
         # Perform all training.
         envs, spaces, obs_len = make_vec_envs(args, './logs/runinfo', True)

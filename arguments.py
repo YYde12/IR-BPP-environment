@@ -93,6 +93,8 @@ def get_args():
 
     parser.add_argument('--evaluate', action='store_true', help='Evaluate only')
     parser.add_argument('--evaluation-episodes-test', type=int, default=2000, help='Number of evaluation episodes to average over')
+    parser.add_argument('--use_heuristic', action='store_true', help='If set, use heuristic policy instead of RL')
+    parser.add_argument('--heuristic_method', type=str, default='MINZ', choices=['MINZ', 'DBLF', 'FIRSTFIT', 'HM'], help='Heuristic method to use when --use_heuristic is set')
 
 
     args = parser.parse_args()
