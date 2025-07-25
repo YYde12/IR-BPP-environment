@@ -29,7 +29,7 @@ def getConvexHullActions(posZValid, mask, coors):
         # create Delaunay hulls
         filtered_hulls = []
         for i in range(len(parts)):
-            vertices = np.around(parts[i][0], decimals=4)
+            vertices = np.around(parts[i][0], decimals=2)
             # 检查维度退化
             if np.linalg.matrix_rank(vertices - vertices[0]) < 3:
                 print(f"[rotIdx {rotIdx}] Skipping degenerate convex hull {i} (less than 3D)")
@@ -37,7 +37,7 @@ def getConvexHullActions(posZValid, mask, coors):
             hull = ConvexHull(vertices)
             volume = hull.volume
             print("Convex hull num " , i, " volume ", volume)
-            if volume > 10:
+            if volume > 1:
                 filtered_hulls.append(Delaunay(vertices))
 
         if not filtered_hulls:
@@ -49,22 +49,44 @@ def getConvexHullActions(posZValid, mask, coors):
         # pos_points = coors[valid_idx]  # shape: (N, 2)
         # heights = posZValid[rotIdx][valid_idx]
 
-        # Find all points in the convex hull
-        idx = np.where((mask[rotIdx] == 1) | (mask[rotIdx] == 0))
+        # # Find all points in the convex hull
+        # idx = np.where((mask[rotIdx] == 1) | (mask[rotIdx] == 0))
+        # pos_points = coors[idx]  # shape: (N, 2)
+        # heights = posZValid[rotIdx][idx]
+        # valid_mask = mask[rotIdx][idx]
+        # # Create a new candidate point under this rotation
+        # candidates = []
+        # for (x, y), z, v in zip(pos_points, heights, valid_mask):  
+        #     point = np.array([x, y, z])  
+        #     for hull in filtered_hulls:
+        #         if hull.find_simplex(point) >= 0:  # point in the convex hull
+        #             candidate = [rotIdx, x, y, z, v]
+        #             candidates.append(candidate)
+        #             break
+
+        # Find all valid points in the convex hull
+        idx = np.where((mask[rotIdx] == 1))
         pos_points = coors[idx]  # shape: (N, 2)
         heights = posZValid[rotIdx][idx]
         valid_mask = mask[rotIdx][idx]
-        # Create a new candidate point under this rotation
+        # Create a new candidate point under this rotation, Each convex hull has at most five candidates
         candidates = []
+        hull_counters = [0 for _ in filtered_hulls]
+        max_per_hull = 5
         for (x, y), z, v in zip(pos_points, heights, valid_mask):  
             point = np.array([x, y, z])  
-            for hull in filtered_hulls:
-                if hull.find_simplex(point) >= 0:  # point in the convex hull
+            for i, hull in enumerate(filtered_hulls):
+                if hull_counters[i] >= max_per_hull:
+                    continue
+                if hull.find_simplex(point) >= 0:
                     candidate = [rotIdx, x, y, z, v]
                     candidates.append(candidate)
+                    hull_counters[i] += 1
                     break
+
         if len(candidates)!= 0:
             candidates = np.array(candidates)
+            candidates = np.unique(candidates, axis=0)
             ROT = candidates[:, 0].reshape(-1, 1)
             X   = candidates[:, 1].reshape(-1, 1)
             Y   = candidates[:, 2].reshape(-1, 1)
@@ -303,4 +325,4 @@ def visualize_convex_parts_matplotlib(parts):
 # mask = np.array(mask)
 # posZValid = np.array(posZValid)
 # output_new = getConvexHullActions(posZValid, mask, coors)
-# print("output_new:", output_new[:93])
+# print("output_new:", output_new[:80])
