@@ -3,7 +3,7 @@ import numpy as np
 from tensorboard.backend.event_processing import event_accumulator
 
 # Log file path
-reward_file = '/home/yu/git/IR-BPP/logs/runs/IR-blockoutexphier-2025.07.25-14-20-31/events.out.tfevents.1753446033.yu-ASUS-TUF-Gaming-A15-FA507XI-FA507XI'
+reward_file = '/home/yu/git/IR-BPP/result_rewardAndLoss/IR-blockoutexphier-2025.07.01-23-56-04/events.out.tfevents.1751406966.yu-ASUS-TUF-Gaming-A15-FA507XI-FA507XI'
 # Load reward log
 reward_ea = event_accumulator.EventAccumulator(reward_file)
 reward_ea.Reload()

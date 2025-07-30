@@ -1,53 +1,49 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from pydelatin import Delatin
-from pydelatin.util import rescale_positions
 import trimesh
 import coacd
 from scipy.spatial import ConvexHull, Delaunay
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-def getConvexHullActions(posZValid, mask, coors):
+def getConvexHullActions(heightmapC, posZValid, mask, coors, scale = 1):
     allCandidates = []
-    for rotIdx in range(len(posZValid)):
-        print(f"init posZValid : min={np.min(posZValid)}, max={np.max(posZValid)}")
+    heightmap = heightmapC.copy()
+    # create free space mesh
+    heightmap_scaled = np.round(heightmap * scale, 6)
+    free_space_mesh = preview_heightmap_tin(heightmap_scaled, scale)
 
-        heightmap = posZValid[rotIdx].copy()
-        # Adjust invalid values to box height
-        heightmap[heightmap == 1000] = 5
-        print(f"[rotIdx {rotIdx}] heightmap: min={np.min(heightmap)}, max={np.max(heightmap)}")
+    # CoACD convex decomposition
+    mesh_coacd = coacd.Mesh(free_space_mesh.vertices, free_space_mesh.faces)
+    parts = coacd.run_coacd(mesh_coacd, max_convex_hull = 32, threshold = 0.01) # origin = 0.01
+    print(f"CoACD decomposition {len(parts)} convex hulls")
 
-        # create free space mesh
-        free_space_mesh = preview_heightmap_tin(heightmap)
-
-        # CoACD convex decomposition
-        mesh_coacd = coacd.Mesh(free_space_mesh.vertices, free_space_mesh.faces)
-        parts = coacd.run_coacd(mesh_coacd, max_convex_hull=50, threshold=0.1)
-        print(f"[rotIdx {rotIdx}] CoACD decomposition {len(parts)} convex hulls")
-
-        # create Delaunay hulls
-        filtered_hulls = []
-        for i in range(len(parts)):
-            vertices = np.around(parts[i][0], decimals=2)
-            # 检查维度退化
-            if np.linalg.matrix_rank(vertices - vertices[0]) < 3:
-                print(f"[rotIdx {rotIdx}] Skipping degenerate convex hull {i} (less than 3D)")
-                continue
-            hull = ConvexHull(vertices)
-            volume = hull.volume
-            print("Convex hull num " , i, " volume ", volume)
-            if volume > 1:
-                filtered_hulls.append(Delaunay(vertices))
-
-        if not filtered_hulls:
-            print(f"[rotIdx {rotIdx}] No convex hull over the volume threshold")
+    # create Delaunay hulls
+    filtered_hulls = []
+    for i in range(len(parts)):
+        vertices = np.around(parts[i][0], decimals=6) # origin = 2
+        # 检查维度退化
+        if np.linalg.matrix_rank(vertices - vertices[0]) < 3:
+            print(f"Skipping degenerate convex hull {i} (less than 3D)")
             continue
+        hull = ConvexHull(vertices)
+        volume = hull.volume
+        print("Convex hull num " , i, " volume ", volume)
+        if volume > 3 * scale:
+            try:
+                delaunay = Delaunay(vertices)
+                filtered_hulls.append(delaunay)
+            except Exception as e:
+                print(f"Delaunay failed at part {i}: {e}")
+                continue
+    
+    if not filtered_hulls:
+        print("No convex hull over the volume threshold")
+        return None
 
-        # # Find all valid points in the convex hull
-        # valid_idx = np.where(mask[rotIdx] == 1)
-        # pos_points = coors[valid_idx]  # shape: (N, 2)
-        # heights = posZValid[rotIdx][valid_idx]
+    
+    for rotIdx in range(len(posZValid)):
 
         # # Find all points in the convex hull
         # idx = np.where((mask[rotIdx] == 1) | (mask[rotIdx] == 0))
@@ -72,9 +68,10 @@ def getConvexHullActions(posZValid, mask, coors):
         # Create a new candidate point under this rotation, Each convex hull has at most five candidates
         candidates = []
         hull_counters = [0 for _ in filtered_hulls]
-        max_per_hull = 5
+        max_per_hull = 10  #5
         for (x, y), z, v in zip(pos_points, heights, valid_mask):  
-            point = np.array([x, y, z])  
+            redundancy = 0.01 * scale  # 尝试给点一点冗余0.01
+            point = np.array([x , y , z * scale + redundancy])  
             for i, hull in enumerate(filtered_hulls):
                 if hull_counters[i] >= max_per_hull:
                     continue
@@ -87,6 +84,7 @@ def getConvexHullActions(posZValid, mask, coors):
         if len(candidates)!= 0:
             candidates = np.array(candidates)
             candidates = np.unique(candidates, axis=0)
+            # candidates = candidates[np.argsort(candidates[:, 3])]
             ROT = candidates[:, 0].reshape(-1, 1)
             X   = candidates[:, 1].reshape(-1, 1)
             Y   = candidates[:, 2].reshape(-1, 1)
@@ -98,15 +96,19 @@ def getConvexHullActions(posZValid, mask, coors):
             continue
     if len(allCandidates)!= 0:
         allCandidates = np.concatenate(allCandidates, axis=0)
+        allCandidates = allCandidates[np.argsort(allCandidates[:, 3])]
         return allCandidates
     else:
         return None
     
 
 
-def preview_heightmap_tin(heightmap):
+def preview_heightmap_tin(heightmap, scale):
     h, w = heightmap.shape
-    adjusted_height = 5  # bin heights
+    adjusted_height = np.max(heightmap) + 0.05 * scale  # heights
+    #暂时先不要有这个高度限制
+    # if adjusted_height > 0.3 * scale:
+    #     adjusted_height = 0.3 * scale
     container_height = np.full((h, w), adjusted_height, dtype=np.float32)
     free_space = container_height - heightmap
     # Mirror on the y axis
@@ -326,3 +328,19 @@ def visualize_convex_parts_matplotlib(parts):
 # posZValid = np.array(posZValid)
 # output_new = getConvexHullActions(posZValid, mask, coors)
 # print("output_new:", output_new[:80])
+# create free space mesh
+# free_space_mesh = preview_heightmap_tin(heightmapC, scale=1)
+
+# # CoACD convex decomposition
+# mesh_coacd = coacd.Mesh(free_space_mesh.vertices, free_space_mesh.faces)
+# parts = coacd.run_coacd(mesh_coacd, max_convex_hull=5, threshold=0.01)
+# visualize_convex_parts_matplotlib(parts)
+# for i in range(len(parts)):
+#     vertices = np.around(parts[i][0], decimals=2)
+#     # 检查维度退化
+#     if np.linalg.matrix_rank(vertices - vertices[0]) < 3:
+#         print(f"Skipping degenerate convex hull {i} (less than 3D)")
+#         continue
+#     hull = ConvexHull(vertices)
+#     volume = hull.volume
+#     print("Convex hull num " , i, " volume ", volume)

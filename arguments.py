@@ -79,7 +79,7 @@ def get_args():
     parser.add_argument('--selectedAction', type=int, default=500, help='How many actions to select from the action space')
     parser.add_argument('--maxBatch', type=int, default=2, help='How many batches for simulation')
     parser.add_argument('--visual', action='store_true', help='Render the scene')
-    parser.add_argument('--resolutionA', type=float, default = 0.02, help='The resolution for the action space')
+    parser.add_argument('--resolutionA', type=float, default = 0.01, help='The resolution for the action space') #0.02
     parser.add_argument('--resolutionH', type=float, default = 0.01, help='The resolution for the heightmap')
     parser.add_argument('--resolutionZ', type=float, default = 0.01, help='The resolution for the z axis')
     parser.add_argument('--resolutionRot', type=int, default = 8, help='The resolution for the rotation, 2 for cube, 4 for blockout, and 8 for the rest')

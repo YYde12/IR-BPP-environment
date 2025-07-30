@@ -100,7 +100,7 @@ def main(args):
         if args.use_heuristic:
             print(f"Start heuristic evaluation with method: {args.heuristic_method}")
             test_heuristic(args, printInfo=True, timeStr=timeStr)
-        if args.hierachical:
+        elif args.hierachical:
             test_hierachical(args, [orderDQN, locDQN], True, timeStr)  # Test
         else:
             print('Start RL evaluation...')
